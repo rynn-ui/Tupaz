@@ -1,0 +1,80 @@
+{
+  "version": 1,
+  "modes": [
+    {
+      "mode_id": "fast",
+      "scale_factor": 1,
+      "stages": [
+        {
+          "stage_id": "sharpen_cpu",
+          "type": "sharpen",
+          "model_name": null,
+          "enabled": true,
+          "parameters": {
+            "strength": "0.5"
+          }
+        }
+      ]
+    },
+    {
+      "mode_id": "balanced",
+      "scale_factor": 2,
+      "stages": [
+        {
+          "stage_id": "esrgan_2x",
+          "type": "upscale",
+          "model_name": "realesr-animevideov3-x2.bin",
+          "enabled": true,
+          "parameters": {
+            "tile_size": "256"
+          }
+        }
+      ]
+    },
+    {
+      "mode_id": "ultra",
+      "scale_factor": 2,
+      "stages": [
+        {
+          "stage_id": "esrgan_2x",
+          "type": "upscale",
+          "model_name": "realesr-animevideov3-x2.bin",
+          "enabled": true,
+          "parameters": {
+            "tile_size": "256"
+          }
+        }
+      ]
+    },
+    {
+      "mode_id": "anime",
+      "scale_factor": 2,
+      "stages": [
+        {
+          "stage_id": "anime_upscale_2x",
+          "type": "upscale",
+          "model_name": "realesr-animevideov3-x2.bin",
+          "enabled": true,
+          "parameters": {
+            "tile_size": "256"
+          }
+        }
+      ]
+    },
+    {
+      "mode_id": "auto",
+      "scale_factor": 2,
+      "stages": [
+        {
+          "stage_id": "esrgan_2x",
+          "type": "upscale",
+          "model_name": "realesr-animevideov3-x2.bin",
+          "enabled": true,
+          "parameters": {
+            "tile_size": "256"
+          }
+        }
+      ]
+    }
+  ]
+}

@@ -1,0 +1,39 @@
+#version 450
+
+layout(local_size_x = 16, local_size_y = 16, local_size_z = 1) in;
+
+layout(binding = 0, rgba8) uniform readonly image2D inputImage;
+layout(binding = 1, rgba8) uniform writeonly image2D outputImage;
+
+layout(push_constant) uniform PushConstants {
+    float sharpness; // 0.0 (subtle) to 1.0 (strong)
+} params;
+
+// Contrast Adaptive Sharpening (CAS) filter kernel
+void main() {
+    ivec2 pos = ivec2(gl_GlobalInvocationID.xy);
+    ivec2 size = imageSize(inputImage);
+
+    if (pos.x >= size.x || pos.y >= size.y) {
+        return;
+    }
+
+    // Sample 3x3 cross neighborhood
+    vec4 e = imageLoad(inputImage, pos);
+    vec4 a = imageLoad(inputImage, pos + ivec2(-1, 0));
+    vec4 b = imageLoad(inputImage, pos + ivec2(0, -1));
+    vec4 d = imageLoad(inputImage, pos + ivec2(1, 0));
+    vec4 c = imageLoad(inputImage, pos + ivec2(0, 1));
+
+    // Min & Max local contrast bounds
+    vec4 minColor = min(e, min(min(a, b), min(c, d)));
+    vec4 maxColor = max(e, max(max(a, b), max(c, d)));
+
+    // Adaptive weight calculation
+    vec4 amp = clamp(min(minColor, 2.0 - maxColor) / (maxColor + 1e-5), 0.0, 1.0);
+    vec4 w = sqrt(amp) * (-0.125 * params.sharpness);
+
+    // Apply CAS filter kernel
+    vec4 result = (a * w + b * w + c * w + d * w + e) / (1.0 + 4.0 * w);
+    imageStore(outputImage, pos, clamp(result, 0.0, 1.0));
+}

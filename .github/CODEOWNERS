@@ -1,0 +1,40 @@
+# CODEOWNERS
+#
+# Each line assigns ownership of a path pattern to one or more GitHub usernames.
+# Owners are automatically requested for review on PRs touching their paths.
+#
+# Format:
+#   <path pattern>    @<github-username>
+
+# Default: project owner reviews everything
+*                           @tupaz-owner
+
+# Memory system — documentation engineer
+/memory/                    @tupaz-docs
+
+# Decisions — principal architect
+/decisions/                 @tupaz-arch
+
+# Native code — cpp / ncnn / vulkan engineers
+/app/src/main/cpp/          @tupaz-native
+
+# Pipeline — pipeline engineer
+/app/src/main/java/com/tupaz/pipeline/     @tupaz-pipeline
+/app/src/main/java/com/tupaz/flow/        @tupaz-pipeline
+
+# AI models — ai engineer
+/app/src/main/java/com/tupaz/face/        @tupaz-ai
+/app/src/main/java/com/tupaz/auto/        @tupaz-ai
+/app/src/main/java/com/tupaz/artifact/    @tupaz-ai
+/app/src/main/java/com/tupaz/cache/       @tupaz-ai
+
+# UI — ui engineer
+/app/src/main/java/com/tupaz/ui/          @tupaz-ui
+
+# Data / download / storage — android engineer
+/app/src/main/java/com/tupaz/data/        @tupaz-android
+/app/src/main/java/com/tupaz/worker/      @tupaz-android
+
+# Tests — testing engineer
+/app/src/test/                            @tupaz-testing
+/app/src/androidTest/                     @tupaz-testing
