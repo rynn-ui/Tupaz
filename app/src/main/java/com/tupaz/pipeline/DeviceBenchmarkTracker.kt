@@ -44,6 +44,8 @@ class DeviceBenchmarkTracker(private val context: Context) {
     var outputFps: Int = 0
     var outputDurationMs: Long = 0
     var outputFileSizeBytes: Long = 0
+    var modelName: String = ""
+    var qualityLevel: String = ""
 
     // Thread-safe Timings (nanoseconds)
     val decodeNs = AtomicLong(0)
@@ -157,6 +159,8 @@ class DeviceBenchmarkTracker(private val context: Context) {
             androidVersion = androidVersion,
             abi = abi,
             ramInfo = "$availRamMb MB / $totalRamMb MB",
+            modelName = modelName,
+            qualityLevel = qualityLevel,
             inputWidth = inputWidth,
             inputHeight = inputHeight,
             inputFps = inputFps,
@@ -196,6 +200,11 @@ class DeviceBenchmarkTracker(private val context: Context) {
             put("model", report.deviceModel)
             put("androidVersion", report.androidVersion)
             put("abi", report.abi)
+        }
+
+        val aiModel = JSONObject().apply {
+            put("modelName", report.modelName)
+            put("quality", report.qualityLevel)
         }
 
         val input = JSONObject().apply {
@@ -243,6 +252,7 @@ class DeviceBenchmarkTracker(private val context: Context) {
         }
 
         root.put("device", dev)
+        root.put("aiModel", aiModel)
         root.put("input", input)
         root.put("output", output)
         root.put("timing", timing)
@@ -268,11 +278,20 @@ class DeviceBenchmarkTracker(private val context: Context) {
             
             [Tupaz-Speed] ===== DEVICE BENCHMARK =====
             
+            Model = ${report.modelName}
+            Quality = ${report.qualityLevel}
+            ms/frame = ${report.ncnnMsPerFrame}ms
+            processing FPS = ${report.processingFps} FPS
+            
             Device:
               Model: ${report.deviceModel}
               Android: ${report.androidVersion}
               ABI: ${report.abi}
               RAM: ${report.ramInfo}
+            
+            AI Model:
+              Model Name: ${report.modelName}
+              Quality: ${report.qualityLevel}
             
             Input:
               Resolution: ${report.inputWidth}x${report.inputHeight}
@@ -334,6 +353,8 @@ data class BenchmarkReport(
     val androidVersion: String,
     val abi: String,
     val ramInfo: String,
+    val modelName: String = "",
+    val qualityLevel: String = "",
     val inputWidth: Int,
     val inputHeight: Int,
     val inputFps: Int,

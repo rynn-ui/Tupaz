@@ -22,23 +22,29 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.ArrowDropDown
 import androidx.compose.material.icons.filled.AutoAwesome
 import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.ChevronRight
 import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.MoreVert
+import androidx.compose.material.icons.outlined.Lightbulb
 import androidx.compose.material.icons.filled.Movie
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.ShoppingBag
 import androidx.compose.material.icons.filled.Speed
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
+import com.tupaz.ui.theme.accessibleButtonSize
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
+import com.tupaz.domain.pipeline.AiQuality
 import androidx.compose.material3.OutlinedCard
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Slider
@@ -63,6 +69,18 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.compose.foundation.layout.widthIn
+import androidx.compose.ui.draw.shadow
+import androidx.compose.ui.text.SpanStyle
+import androidx.compose.ui.text.buildAnnotatedString
+import androidx.compose.ui.text.withStyle
+import androidx.compose.ui.unit.IntOffset
+import androidx.compose.ui.unit.IntRect
+import androidx.compose.ui.unit.IntSize
+import androidx.compose.ui.unit.LayoutDirection
+import androidx.compose.ui.window.Popup
+import androidx.compose.ui.window.PopupPositionProvider
+import androidx.compose.ui.window.PopupProperties
 import com.tupaz.ui.main.ProjectItem
 import com.tupaz.ui.theme.VercelBackground
 import com.tupaz.ui.theme.VercelBorder
@@ -72,6 +90,32 @@ import com.tupaz.ui.theme.VercelSurface
 import com.tupaz.ui.theme.VercelTextMuted
 import com.tupaz.ui.theme.VercelTextPrimary
 import com.tupaz.ui.theme.VercelTextSecondary
+
+private class TipPopoverPositionProvider : PopupPositionProvider {
+    override fun calculatePosition(
+        anchorBounds: IntRect,
+        windowSize: IntSize,
+        layoutDirection: LayoutDirection,
+        popupContentSize: IntSize
+    ): IntOffset {
+        val spaceAbove = anchorBounds.top
+        val spaceBelow = windowSize.height - anchorBounds.bottom
+
+        val y = if (spaceAbove > spaceBelow && spaceAbove > popupContentSize.height + 12) {
+            anchorBounds.top - popupContentSize.height - 12
+        } else {
+            anchorBounds.bottom + 12
+        }
+
+        val x = (anchorBounds.right - popupContentSize.width)
+            .coerceIn(16, (windowSize.width - popupContentSize.width - 16).coerceAtLeast(16))
+
+        return IntOffset(
+            x,
+            y.coerceIn(16, (windowSize.height - popupContentSize.height - 16).coerceAtLeast(16))
+        )
+    }
+}
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -85,6 +129,7 @@ fun EnhanceVideoScreen(
 ) {
     val uiState by viewModel.uiState.collectAsState()
     val context = LocalContext.current
+    var showHighQualityTipPopover by remember { mutableStateOf(false) }
 
     LaunchedEffect(Unit) {
         viewModel.refreshInstalledModels(context)
@@ -148,7 +193,7 @@ fun EnhanceVideoScreen(
                     },
                     modifier = Modifier
                         .fillMaxWidth()
-                        .height(50.dp),
+                        .accessibleButtonSize(50.dp),
                     shape = RoundedCornerShape(8.dp),
                     colors = ButtonDefaults.buttonColors(
                         containerColor = VercelTextPrimary,
@@ -198,8 +243,7 @@ fun EnhanceVideoScreen(
         ) {
             item { Spacer(modifier = Modifier.height(4.dp)) }
 
-            // Add Video Vercel Card
-            item {
+            item(key = "video_card") {
                 Card(
                     modifier = Modifier
                         .fillMaxWidth()
@@ -298,18 +342,89 @@ fun EnhanceVideoScreen(
                 }
             }
 
-            // AI Model Header & Store Link
-            item {
+            item(key = "project_name") {
+                var isEditingName by remember { mutableStateOf(false) }
+                var tempName by remember(uiState.projectName) { mutableStateOf(uiState.projectName) }
+
+                Column {
+                    Text(
+                        text = "Project Name",
+                        style = MaterialTheme.typography.bodyMedium.copy(color = VercelTextSecondary)
+                    )
+                    Spacer(modifier = Modifier.height(8.dp))
+
+                    Box(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clip(RoundedCornerShape(8.dp))
+                            .background(VercelSurface)
+                            .border(1.dp, VercelBorder, RoundedCornerShape(8.dp))
+                            .padding(horizontal = 14.dp, vertical = 10.dp)
+                    ) {
+                        if (isEditingName) {
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                androidx.compose.material3.OutlinedTextField(
+                                    value = tempName,
+                                    onValueChange = { tempName = it },
+                                    modifier = Modifier.weight(1f),
+                                    singleLine = true,
+                                    colors = androidx.compose.material3.OutlinedTextFieldDefaults.colors(
+                                        focusedTextColor = VercelTextPrimary,
+                                        unfocusedTextColor = VercelTextPrimary,
+                                        focusedBorderColor = VercelBorderHighlight,
+                                        unfocusedBorderColor = VercelBorder
+                                    )
+                                )
+                                Spacer(modifier = Modifier.width(8.dp))
+                                TextButton(onClick = {
+                                    val finalName = tempName.trim().ifEmpty { "New Project" }
+                                    viewModel.setProjectName(finalName)
+                                    isEditingName = false
+                                }) {
+                                    Text("Save", color = VercelTextPrimary, fontWeight = FontWeight.Bold)
+                                }
+                            }
+                        } else {
+                            Row(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .clickable { isEditingName = true },
+                                horizontalArrangement = Arrangement.SpaceBetween,
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Text(
+                                    text = uiState.projectName.ifEmpty { "New Project" },
+                                    style = MaterialTheme.typography.titleMedium.copy(
+                                        color = VercelTextPrimary,
+                                        fontWeight = FontWeight.Bold
+                                    )
+                                )
+                                Icon(
+                                    imageVector = Icons.Default.Edit,
+                                    contentDescription = "Edit Project Name",
+                                    tint = VercelTextSecondary,
+                                    modifier = Modifier.size(18.dp)
+                                )
+                            }
+                        }
+                    }
+                }
+            }
+
+            item(key = "model_header") {
                 Row(
                     modifier = Modifier.fillMaxWidth(),
                     horizontalArrangement = Arrangement.SpaceBetween,
                     verticalAlignment = Alignment.CenterVertically
                 ) {
                     Column(modifier = Modifier.weight(1f)) {
-                        Text("AI Model", style = MaterialTheme.typography.titleMedium.copy(color = VercelTextPrimary, fontWeight = FontWeight.Bold))
+                        Text("AI Model Info", style = MaterialTheme.typography.titleMedium.copy(color = VercelTextPrimary, fontWeight = FontWeight.Bold))
                         Spacer(modifier = Modifier.height(2.dp))
                         Text(
-                            text = "${uiState.selectedModel} · Progressive Scan",
+                            text = "${uiState.selectedQuality.modelDisplayName} · Progressive Scan",
                             style = MaterialTheme.typography.bodySmall,
                             color = VercelTextSecondary
                         )
@@ -331,8 +446,213 @@ fun EnhanceVideoScreen(
                 }
             }
 
-            // AI Mode Segmented Selector (Vercel Style)
-            item {
+            item(key = "model_selector") {
+                var qualityDropdownExpanded by remember { mutableStateOf(false) }
+
+                Column {
+                    Text(
+                        text = "AI Model / Quality",
+                        style = MaterialTheme.typography.bodyMedium.copy(color = VercelTextSecondary)
+                    )
+                    Spacer(modifier = Modifier.height(8.dp))
+
+                    Box {
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .clip(RoundedCornerShape(8.dp))
+                                .background(VercelSurface)
+                                .border(1.dp, VercelBorder, RoundedCornerShape(8.dp))
+                                .clickable { qualityDropdownExpanded = true }
+                                .padding(horizontal = 14.dp, vertical = 12.dp),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Column {
+                                Text(
+                                    text = uiState.selectedQuality.displayName,
+                                    style = MaterialTheme.typography.titleMedium.copy(
+                                        color = VercelTextPrimary,
+                                        fontWeight = FontWeight.Bold
+                                    )
+                                )
+                                Spacer(modifier = Modifier.height(2.dp))
+                                Text(
+                                    text = uiState.selectedQuality.modelDisplayName,
+                                    style = MaterialTheme.typography.bodySmall.copy(color = VercelTextSecondary)
+                                )
+                            }
+                            Icon(
+                                imageVector = Icons.Default.ArrowDropDown,
+                                contentDescription = "Select AI Model Quality",
+                                tint = VercelTextPrimary
+                            )
+                        }
+
+                        DropdownMenu(
+                            expanded = qualityDropdownExpanded,
+                            onDismissRequest = { qualityDropdownExpanded = false },
+                            modifier = Modifier
+                                .fillMaxWidth(0.9f)
+                                .background(VercelSurface)
+                                .border(1.dp, VercelBorder, RoundedCornerShape(8.dp))
+                        ) {
+                            AiQuality.entries.forEach { quality ->
+                                val isSelected = quality == uiState.selectedQuality
+                                DropdownMenuItem(
+                                    text = {
+                                        Row(
+                                            modifier = Modifier.fillMaxWidth(),
+                                            horizontalArrangement = Arrangement.SpaceBetween,
+                                            verticalAlignment = Alignment.CenterVertically
+                                        ) {
+                                            Column(
+                                                modifier = Modifier
+                                                    .weight(1f)
+                                                    .padding(vertical = 4.dp)
+                                            ) {
+                                                Text(
+                                                    text = "• ${quality.displayName}",
+                                                    style = MaterialTheme.typography.titleMedium.copy(
+                                                        color = if (isSelected) VercelTextPrimary else VercelTextSecondary,
+                                                        fontWeight = FontWeight.Bold
+                                                    )
+                                                )
+                                                Spacer(modifier = Modifier.height(2.dp))
+                                                Text(
+                                                    text = quality.modelDisplayName,
+                                                    style = MaterialTheme.typography.bodySmall.copy(
+                                                        color = if (isSelected) VercelTextPrimary else VercelTextSecondary
+                                                    )
+                                                )
+                                            }
+                                            if (quality == AiQuality.HIGH) {
+                                                Box {
+                                                    IconButton(
+                                                        onClick = {
+                                                            showHighQualityTipPopover = !showHighQualityTipPopover
+                                                        },
+                                                        modifier = Modifier.accessibleButtonSize(36.dp)
+                                                    ) {
+                                                        Icon(
+                                                            imageVector = Icons.Outlined.Lightbulb,
+                                                            contentDescription = "High quality processing tip",
+                                                            tint = VercelTextPrimary,
+                                                            modifier = Modifier.size(18.dp)
+                                                        )
+                                                    }
+
+                                                    if (showHighQualityTipPopover) {
+                                                        Popup(
+                                                            popupPositionProvider = remember { TipPopoverPositionProvider() },
+                                                            onDismissRequest = { showHighQualityTipPopover = false },
+                                                            properties = PopupProperties(focusable = true, dismissOnClickOutside = true)
+                                                        ) {
+                                                            Card(
+                                                                modifier = Modifier
+                                                                    .widthIn(min = 280.dp, max = 340.dp)
+                                                                    .padding(horizontal = 4.dp)
+                                                                    .shadow(12.dp, RoundedCornerShape(12.dp))
+                                                                    .border(1.dp, Color(0xFFE5E7EB), RoundedCornerShape(12.dp)),
+                                                                shape = RoundedCornerShape(12.dp),
+                                                                colors = CardDefaults.cardColors(containerColor = Color.White)
+                                                            ) {
+                                                                Column(
+                                                                    modifier = Modifier
+                                                                        .fillMaxWidth()
+                                                                        .padding(16.dp)
+                                                                ) {
+                                                                    Row(verticalAlignment = Alignment.CenterVertically) {
+                                                                        Icon(
+                                                                            imageVector = Icons.Outlined.Lightbulb,
+                                                                            contentDescription = null,
+                                                                            tint = Color.Black,
+                                                                            modifier = Modifier.size(18.dp)
+                                                                        )
+                                                                        Spacer(modifier = Modifier.width(8.dp))
+                                                                        Text(
+                                                                            text = "High Quality Tip",
+                                                                            style = MaterialTheme.typography.titleMedium.copy(
+                                                                                color = Color.Black,
+                                                                                fontWeight = FontWeight.Bold,
+                                                                                fontSize = 15.sp
+                                                                            )
+                                                                        )
+                                                                    }
+
+                                                                    Spacer(modifier = Modifier.height(10.dp))
+
+                                                                    Text(
+                                                                        text = "High quality processing uses more resources and may take longer.",
+                                                                        style = MaterialTheme.typography.bodyMedium.copy(
+                                                                            color = Color(0xFF1F2937),
+                                                                            fontSize = 13.sp,
+                                                                            lineHeight = 18.sp
+                                                                        )
+                                                                    )
+
+                                                                    Spacer(modifier = Modifier.height(8.dp))
+
+                                                                    Text(
+                                                                        text = buildAnnotatedString {
+                                                                            append("For longer videos, process ")
+                                                                            withStyle(SpanStyle(fontWeight = FontWeight.Bold)) {
+                                                                                append("overnight")
+                                                                            }
+                                                                            append(" while your ")
+                                                                            withStyle(SpanStyle(fontWeight = FontWeight.Bold)) {
+                                                                                append("phone is charging")
+                                                                            }
+                                                                            append(" for the best experience.")
+                                                                        },
+                                                                        style = MaterialTheme.typography.bodyMedium.copy(
+                                                                            color = Color(0xFF374151),
+                                                                            fontSize = 13.sp,
+                                                                            lineHeight = 18.sp
+                                                                        )
+                                                                    )
+
+                                                                    Spacer(modifier = Modifier.height(8.dp))
+
+                                                                    Text(
+                                                                        text = buildAnnotatedString {
+                                                                            append("Tupaz can continue processing while your phone is ")
+                                                                            withStyle(SpanStyle(fontWeight = FontWeight.Bold)) {
+                                                                                append("locked")
+                                                                            }
+                                                                            append(" or the app is in the ")
+                                                                            withStyle(SpanStyle(fontWeight = FontWeight.Bold)) {
+                                                                                append("background")
+                                                                            }
+                                                                            append(".")
+                                                                        },
+                                                                        style = MaterialTheme.typography.bodyMedium.copy(
+                                                                            color = Color(0xFF111827),
+                                                                            fontWeight = FontWeight.Medium,
+                                                                            fontSize = 13.sp,
+                                                                            lineHeight = 18.sp
+                                                                        )
+                                                                    )
+                                                                }
+                                                            }
+                                                        }
+                                                    }
+                                                }
+                                            }
+                                        }
+                                    },
+                                    onClick = {
+                                        viewModel.selectQuality(quality)
+                                        qualityDropdownExpanded = false
+                                    }
+                                )
+                            }
+                        }
+                    }
+                }
+            }
+
+            item(key = "mode_selector") {
                 Column {
                     Text("AI Mode", style = MaterialTheme.typography.bodyMedium.copy(color = VercelTextSecondary))
                     Spacer(modifier = Modifier.height(8.dp))
@@ -386,7 +706,6 @@ fun EnhanceVideoScreen(
                 }
             }
 
-            // Mode Content: Auto vs Manual Sliders
             if (uiState.selectedAiMode == AiModeSelection.AUTO) {
                 item {
                     Card(

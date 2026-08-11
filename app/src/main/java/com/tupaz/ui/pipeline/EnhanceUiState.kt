@@ -2,6 +2,8 @@ package com.tupaz.ui.pipeline
 
 import android.net.Uri
 
+import com.tupaz.domain.pipeline.AiQuality
+
 enum class AiModeSelection {
     AUTO,
     MANUAL
@@ -23,6 +25,8 @@ data class AutoSettingValues(
 )
 
 data class EnhanceUiState(
+    val projectName: String = "New Project",
+    val projectId: String? = null,
     val fileName: String = "Select Video File",
     val resolutionLabel: String = "1080p (1920x1080)",
     val videoWidth: Int = 1920,
@@ -37,10 +41,13 @@ data class EnhanceUiState(
     val deviceTierLabel: String = "HIGH Tier (Snapdragon 870 / Adreno 650)",
     val devicePowerName: String = "HIGH",
     val autoSettingValues: AutoSettingValues = AutoSettingValues(),
-    val selectedModel: String = "RealESRGAN AnimeVideo v3 (2x)",
-    val selectedModelDescription: String = "Official Real-ESRGAN model for 2x video upscaling.",
+    val selectedQuality: AiQuality = AiQuality.HIGH,
+    val selectedModel: String = AiQuality.HIGH.modelDisplayName,
+    val selectedModelDescription: String = AiQuality.HIGH.description,
     val availableModels: List<ModelOption> = listOf(
-        ModelOption("realesr-animevideov3-x2", "RealESRGAN AnimeVideo v3 (2x)", "Official Real-ESRGAN model for 2x video upscaling.", isInstalled = true)
+        ModelOption(AiQuality.LOW.modelId, AiQuality.LOW.modelDisplayName, AiQuality.LOW.description, isInstalled = false),
+        ModelOption(AiQuality.MEDIUM.modelId, AiQuality.MEDIUM.modelDisplayName, AiQuality.MEDIUM.description, isInstalled = false),
+        ModelOption(AiQuality.HIGH.modelId, AiQuality.HIGH.modelDisplayName, AiQuality.HIGH.description, isInstalled = false)
     ),
     val selectedScaleFactor: String = "2x",
     val availableScaleFactors: List<String> = listOf("2x"),

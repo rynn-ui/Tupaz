@@ -1,9 +1,16 @@
 package com.tupaz.ui.theme
 
+import androidx.compose.foundation.layout.height
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.darkColorScheme
 import androidx.compose.runtime.Composable
-import androidx.compose.ui.graphics.Color
+import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.runtime.compositionLocalOf
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.unit.Dp
+import androidx.compose.ui.unit.dp
+
+val LocalButtonSize = compositionLocalOf { ButtonSize.NORMAL }
 
 private val DarkColorScheme = darkColorScheme(
     primary = VercelTextPrimary,
@@ -22,11 +29,23 @@ private val DarkColorScheme = darkColorScheme(
 
 @Composable
 fun TupazTheme(
+    buttonSize: ButtonSize = ButtonSize.NORMAL,
     content: @Composable () -> Unit
 ) {
-    MaterialTheme(
-        colorScheme = DarkColorScheme,
-        typography = Typography,
-        content = content
-    )
+    CompositionLocalProvider(LocalButtonSize provides buttonSize) {
+        MaterialTheme(
+            colorScheme = DarkColorScheme,
+            typography = Typography,
+            content = content
+        )
+    }
 }
+
+@Composable
+fun Modifier.accessibleButtonSize(defaultHeight: Dp = 48.dp): Modifier {
+    val buttonSize = LocalButtonSize.current
+    val scale = buttonSize.scale
+    val scaledHeight = (defaultHeight * scale).coerceAtLeast(36.dp)
+    return this.then(Modifier.height(scaledHeight))
+}
+

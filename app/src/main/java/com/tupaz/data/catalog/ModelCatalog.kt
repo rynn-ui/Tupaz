@@ -29,6 +29,28 @@ class ModelCatalog(
             version = 1,
             models = listOf(
                 ModelCatalogItem(
+                    modelId = "animejanai-hd-v3-superultracompact-x2",
+                    name = "AnimeJaNai HD V3 SuperUltraCompact 2x",
+                    description = "Super ultra compact 2x upscaler for maximum processing speed.",
+                    version = "0.1.0",
+                    binUrl = "",
+                    paramUrl = "",
+                    sha256 = "",
+                    sizeBytes = 722853L,
+                    requiredForModes = listOf("fast", "balanced", "auto", "anime", "ultra")
+                ),
+                ModelCatalogItem(
+                    modelId = "animejanai-hd-v3-ultracompact-x2",
+                    name = "AnimeJaNai HD V3 UltraCompact 2x",
+                    description = "Ultra compact 2x upscaler balancing speed and anime quality.",
+                    version = "0.1.0",
+                    binUrl = "",
+                    paramUrl = "",
+                    sha256 = "",
+                    sizeBytes = 1950413L,
+                    requiredForModes = listOf("fast", "balanced", "auto", "anime", "ultra")
+                ),
+                ModelCatalogItem(
                     modelId = "realesr-animevideov3-x2",
                     name = "RealESRGAN AnimeVideo v3 (2x)",
                     description = "Official Real-ESRGAN model for 2x video upscaling.",

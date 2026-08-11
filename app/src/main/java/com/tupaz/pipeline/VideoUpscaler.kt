@@ -43,7 +43,6 @@ object VideoUpscaler {
         val (w, h) = getSafeEncodingDimensions(targetWidth, targetHeight)
         val outputFile = File(context.cacheDir, "tupaz_enhanced_${System.currentTimeMillis()}.mp4")
 
-        Log.e("Tupaz-AI", "CURRENT PIPELINE BUILD: 2026-08-08-FIX-A")
         Log.i(TAG, "[Tupaz-AI] === PIPELINE START ===")
         Log.i(TAG, "[Tupaz-AI] Input URI = $inputUri")
         Log.i(TAG, "[Tupaz-AI] Target Resolution = ${w}x${h}")
@@ -91,11 +90,22 @@ object VideoUpscaler {
         return Pair(w, h)
     }
 
-    private fun resolveModelId(modelName: String): String = when {
-        modelName == "realesr-animevideov3-x2" -> "realesr-animevideov3-x2"
-        modelName.contains("Anime", ignoreCase = true) -> "realesr-animevideov3-x2"
-        modelName.contains("RealESRGAN", ignoreCase = true) -> "realesr-animevideov3-x2"
-        else -> "realesr-animevideov3-x2"
+    private fun resolveModelId(modelName: String): String {
+        val matchedQuality = com.tupaz.domain.pipeline.AiQuality.entries.firstOrNull { quality ->
+            quality.modelId.equals(modelName, ignoreCase = true) ||
+            quality.displayName.equals(modelName, ignoreCase = true) ||
+            quality.modelDisplayName.equals(modelName, ignoreCase = true) ||
+            quality.name.equals(modelName, ignoreCase = true)
+        }
+        if (matchedQuality != null) return matchedQuality.modelId
+
+        return when {
+            modelName.contains("SuperUltraCompact", ignoreCase = true) -> com.tupaz.domain.pipeline.AiQuality.LOW.modelId
+            modelName.contains("UltraCompact", ignoreCase = true) -> com.tupaz.domain.pipeline.AiQuality.MEDIUM.modelId
+            modelName.contains("Anime", ignoreCase = true) -> com.tupaz.domain.pipeline.AiQuality.HIGH.modelId
+            modelName.contains("RealESRGAN", ignoreCase = true) -> com.tupaz.domain.pipeline.AiQuality.HIGH.modelId
+            else -> com.tupaz.domain.pipeline.AiQuality.HIGH.modelId
+        }
     }
 
     private suspend fun executeUpscalePipeline(
@@ -115,30 +125,33 @@ object VideoUpscaler {
 
         try {
             val modelId = resolveModelId(modelName)
-            val requestedScale = scaleFactor.filter(Char::isDigit).toIntOrNull() ?: 2
-            Log.i(TAG, "[Tupaz-AI] Model resolution: modelName='$modelName' -> modelId='$modelId', requestedScale=${requestedScale}x")
+            val quality = com.tupaz.domain.pipeline.AiQuality.fromModelId(modelId)
+            tracker.modelName = quality.modelDisplayName
+            tracker.qualityLevel = quality.displayName
+            val numericScale = com.tupaz.domain.pipeline.PipelineScale.parseAndValidate(scaleFactor)
+            Log.i(TAG, "[Tupaz-AI] Model resolution: modelName='$modelName' -> modelId='$modelId', quality=${quality.displayName}, numericScale=${numericScale}x")
 
-            // Initialize NCNN Native Model (Single initialization)
+            // Initialize NCNN Native Model (Single initialization with self-healing)
             val storage = ModelStorage(context)
-            storage.ensureDefaultModelsProvisioned()
+            storage.ensureModelAvailable(modelId)
             val paramFile = storage.getParamFile(modelId)
             val binFile = storage.getBinFile(modelId)
 
             Log.i(TAG, "[Tupaz-AI] Model discovery: paramFile='${paramFile.absolutePath}' (exists=${paramFile.exists()}, size=${paramFile.length()} bytes), binFile='${binFile.absolutePath}' (exists=${binFile.exists()}, size=${binFile.length()} bytes)")
 
-            if (paramFile.exists() && binFile.exists()) {
-                val initSuccess = ncnnBridge.initModel(paramFile.absolutePath, binFile.absolutePath, useGpu = true)
-                if (!initSuccess) {
-                    val msg = "ncnnBridge.initModel returned FALSE for $modelId at ${paramFile.absolutePath}"
-                    Log.e(TAG, "[Tupaz-AI] $msg")
-                    throw IllegalStateException(msg)
-                }
-                Log.i(TAG, "[Tupaz-AI] Initialized production NCNN model successfully: ${paramFile.absolutePath}")
-            } else {
-                val msg = "Required AI model $modelId files missing (paramExists=${paramFile.exists()}, binExists=${binFile.exists()})"
+            if (!paramFile.exists() || !binFile.exists() || paramFile.length() == 0L || binFile.length() == 0L) {
+                val msg = "AI model is not installed: $modelId (.param or .bin missing)"
+                Log.e(TAG, "[Tupaz-AI] $msg")
+                throw IllegalArgumentException(msg)
+            }
+
+            val initSuccess = ncnnBridge.initModel(paramFile.absolutePath, binFile.absolutePath, useGpu = true)
+            if (!initSuccess) {
+                val msg = "AI model failed to initialize: $modelId"
                 Log.e(TAG, "[Tupaz-AI] $msg")
                 throw IllegalStateException(msg)
             }
+            Log.i(TAG, "[Tupaz-AI] Initialized production NCNN model successfully: ${paramFile.absolutePath}")
 
             val ncnnUpscaler = NcnnUpscaler(
                 ncnnBridge = ncnnBridge,
@@ -348,7 +361,7 @@ object VideoUpscaler {
                             }
 
                             val startAiFrameNano = System.nanoTime()
-                            val processedFrame = orchestrator.processFrame(rawFrame, com.tupaz.domain.pipeline.ProcessingMode.AUTO)
+                            val processedFrame = orchestrator.processFrame(rawFrame, com.tupaz.domain.pipeline.ProcessingMode.AUTO, scaleFactor = numericScale)
                             val inferenceTimeMs = (System.nanoTime() - startAiFrameNano) / 1_000_000L
                             tracker.addNcnnInferenceTime(System.nanoTime() - startAiFrameNano)
                             tracker.aiProcessedFramesCount.set(enhancedFramesCount)
@@ -462,6 +475,13 @@ object VideoUpscaler {
                 try {
                     outputFile.delete()
                     Log.i(TAG, "[Tupaz-AI] Cleaned up incomplete output file: ${outputFile.absolutePath}")
+                } catch (_: Exception) {}
+            }
+            val metricsFile = java.io.File(outputFile.absolutePath + ".diagnostics.json")
+            if (metricsFile.exists()) {
+                try {
+                    metricsFile.delete()
+                    Log.i(TAG, "[Tupaz-AI] Cleaned up incomplete diagnostics file: ${metricsFile.absolutePath}")
                 } catch (_: Exception) {}
             }
             Log.e(TAG, "[Tupaz-AI] Pipeline execution error: ${e.message}", e)

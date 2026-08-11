@@ -45,4 +45,6 @@ sealed interface ResultUiState {
         val stackTrace: String,
         val fileName: String = "video.mp4"
     ) : ResultUiState
+
+    data object Cancelled : ResultUiState
 }

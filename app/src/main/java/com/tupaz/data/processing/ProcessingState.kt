@@ -11,6 +11,8 @@ enum class ProcessingStatus {
 }
 
 data class ProcessingJobConfig(
+    val projectId: String = "",
+    val projectName: String = "New Project",
     val fileName: String = "",
     val inputUriString: String? = null,
     val targetWidth: Int = 1280,

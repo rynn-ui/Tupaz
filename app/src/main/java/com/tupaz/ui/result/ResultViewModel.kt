@@ -89,12 +89,7 @@ class ResultViewModel : ViewModel() {
                         )
                     }
                     ProcessingStatus.CANCELLED -> {
-                        _uiState.value = ResultUiState.Error(
-                            message = "Processing was cancelled by user.",
-                            origin = "User Action",
-                            stackTrace = "User clicked Cancel Processing",
-                            fileName = config.fileName
-                        )
+                        _uiState.value = ResultUiState.Cancelled
                     }
                 }
             }

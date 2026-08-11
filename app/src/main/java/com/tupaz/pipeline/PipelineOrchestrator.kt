@@ -19,11 +19,22 @@ class PipelineOrchestrator(
     }
 
     /**
+     * Calculates target output dimensions for a given frame dimension and scale factor.
+     */
+    fun calculateOutputDimensions(width: Int, height: Int, scaleFactor: Int): Pair<Int, Int> {
+        if (width <= 0 || height <= 0 || scaleFactor <= 0) {
+            throw IllegalArgumentException("Dimensions ($width x $height) and scaleFactor ($scaleFactor) must be positive")
+        }
+        return Pair(width * scaleFactor, height * scaleFactor)
+    }
+
+    /**
      * Executes quality enhancement pipeline stages on input frame according to [ProcessingMode].
      */
     fun processFrame(
         rawFrame: RawFrame,
-        mode: ProcessingMode
+        mode: ProcessingMode,
+        scaleFactor: Int = 2
     ): ProcessedFrame {
         if (rawFrame.isEndOfStream) {
             return ProcessedFrame(
@@ -43,31 +54,36 @@ class PipelineOrchestrator(
         // Neural Pipeline Inference - Every decoded frame passes through RealESRGAN
         when (mode) {
             ProcessingMode.FAST -> {
-                buffer = upscaler.process(buffer, currentWidth, currentHeight, modelId, scaleFactor = 2)
-                currentWidth *= 2
-                currentHeight *= 2
+                buffer = upscaler.process(buffer, currentWidth, currentHeight, modelId, scaleFactor = scaleFactor)
+                val (newW, newH) = calculateOutputDimensions(currentWidth, currentHeight, scaleFactor)
+                currentWidth = newW
+                currentHeight = newH
             }
             ProcessingMode.BALANCED -> {
                 buffer = scunetRunner.process(buffer, currentWidth, currentHeight)
-                buffer = upscaler.process(buffer, currentWidth, currentHeight, modelId, scaleFactor = 2)
-                currentWidth *= 2
-                currentHeight *= 2
+                buffer = upscaler.process(buffer, currentWidth, currentHeight, modelId, scaleFactor = scaleFactor)
+                val (newW, newH) = calculateOutputDimensions(currentWidth, currentHeight, scaleFactor)
+                currentWidth = newW
+                currentHeight = newH
             }
             ProcessingMode.ULTRA -> {
                 buffer = denoiser.process(buffer, currentWidth, currentHeight)
-                buffer = upscaler.process(buffer, currentWidth, currentHeight, modelId, scaleFactor = 2)
-                currentWidth *= 2
-                currentHeight *= 2
+                buffer = upscaler.process(buffer, currentWidth, currentHeight, modelId, scaleFactor = scaleFactor)
+                val (newW, newH) = calculateOutputDimensions(currentWidth, currentHeight, scaleFactor)
+                currentWidth = newW
+                currentHeight = newH
             }
             ProcessingMode.ANIME -> {
-                buffer = upscaler.process(buffer, currentWidth, currentHeight, modelId, scaleFactor = 2)
-                currentWidth *= 2
-                currentHeight *= 2
+                buffer = upscaler.process(buffer, currentWidth, currentHeight, modelId, scaleFactor = scaleFactor)
+                val (newW, newH) = calculateOutputDimensions(currentWidth, currentHeight, scaleFactor)
+                currentWidth = newW
+                currentHeight = newH
             }
             ProcessingMode.AUTO -> {
-                buffer = upscaler.process(buffer, currentWidth, currentHeight, modelId, scaleFactor = 2)
-                currentWidth *= 2
-                currentHeight *= 2
+                buffer = upscaler.process(buffer, currentWidth, currentHeight, modelId, scaleFactor = scaleFactor)
+                val (newW, newH) = calculateOutputDimensions(currentWidth, currentHeight, scaleFactor)
+                currentWidth = newW
+                currentHeight = newH
             }
         }
 

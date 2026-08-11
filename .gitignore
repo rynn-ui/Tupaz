@@ -5,23 +5,18 @@
 # Android Studio
 .idea/
 *.iml
-
 # Local Android config
 local.properties
-
 # Kotlin/generated
 .kotlin/
-
 # Native/CMake generated
 .cxx/
 .externalNativeBuild/
 obj/
-
 # Generated APKs
 *.apk
 *.aab
 *.apks
-
 # Logs / temporary
 *.log
 *.tmp
@@ -29,18 +24,14 @@ obj/
 crash_summary.txt
 screen.png
 logcat.txt
-
 # Benchmark reports
 *.benchmark.json
-
 # Signing / secrets
 *.jks
 *.keystore
 google-services.json
-
 # Project documentation / AI reports
 *.md
-
 # Project documentation directories
 decisions/
 docs/
@@ -51,6 +42,11 @@ skills/
 tasks/
 templates/
 validation/
-
 # AI validation / auxiliary projects
 Tupaz-AI-Validator/
+# Markdown documentation
+
+animejanai_overlay.7z
+scratch_*.param
+test_*.param
+models_src/

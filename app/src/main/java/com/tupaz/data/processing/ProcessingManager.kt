@@ -11,6 +11,9 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
 import org.json.JSONObject
 
 object ProcessingManager {
@@ -23,6 +26,13 @@ object ProcessingManager {
 
     private var isInitialized = false
     private var lastPersistTimeMs = 0L
+    private var hasActiveSessionCompletion = false
+
+    fun consumeActiveSessionCompletion(): Boolean {
+        val result = hasActiveSessionCompletion
+        hasActiveSessionCompletion = false
+        return result
+    }
 
     fun init(context: Context) {
         if (isInitialized) return
@@ -52,21 +62,39 @@ object ProcessingManager {
         }
     }
 
-    fun startProcessing(context: Context, config: ProcessingJobConfig) {
-        val now = System.currentTimeMillis()
-        val newState = ProcessingState(
-            status = ProcessingStatus.PROCESSING,
-            config = config,
-            totalFrames = 0,
-            processedFrames = 0,
-            progressPercentage = 0,
-            currentStage = "Initializing Foreground Service...",
-            elapsedTime = "00:00",
-            remainingTime = config.estimatedProcessingTime,
-            startTimeMs = now
-        )
-        _state.value = newState
-        persistState(context, newState)
+    fun startProcessing(context: Context, config: ProcessingJobConfig): Boolean {
+        synchronized(this) {
+            if (_state.value.status == ProcessingStatus.PROCESSING) {
+                Log.w(TAG, "[Tupaz-Manager] Ignored duplicate startProcessing call for '${config.projectId}' — active job for '${_state.value.config.projectId}' is running.")
+                return false
+            }
+            hasActiveSessionCompletion = false
+            val now = System.currentTimeMillis()
+            val newState = ProcessingState(
+                status = ProcessingStatus.PROCESSING,
+                config = config,
+                totalFrames = 0,
+                processedFrames = 0,
+                progressPercentage = 0,
+                currentStage = "Initializing Foreground Service...",
+                elapsedTime = "00:00",
+                remainingTime = config.estimatedProcessingTime,
+                startTimeMs = now
+            )
+            _state.value = newState
+            persistState(context, newState)
+        }
+
+        if (config.projectId.isNotBlank()) {
+            try {
+                com.tupaz.data.storage.ProjectStorage(context).updateProjectStatus(
+                    config.projectId,
+                    com.tupaz.ui.main.ProjectStatus.PROCESSING
+                )
+            } catch (e: Exception) {
+                Log.e(TAG, "Failed to update project status to PROCESSING", e)
+            }
+        }
 
         val serviceIntent = Intent(context, VideoProcessingService::class.java).apply {
             action = VideoProcessingService.ACTION_START
@@ -78,6 +106,7 @@ object ProcessingManager {
             Log.e(TAG, "[Tupaz-Manager] Failed to start foreground service", e)
             failProcessing(context, "Failed to start foreground service: ${e.message}")
         }
+        return true
     }
 
     fun updateProgress(context: Context, currentFrame: Int, totalFrames: Int, stage: String) {
@@ -141,6 +170,7 @@ object ProcessingManager {
     }
 
     fun completeProcessing(context: Context, outputUri: Uri, realProcessingTime: String, realOutputSize: String) {
+        hasActiveSessionCompletion = true
         val currentState = _state.value
         val completedState = currentState.copy(
             status = ProcessingStatus.COMPLETED,
@@ -154,6 +184,67 @@ object ProcessingManager {
         )
         _state.value = completedState
         persistState(context, completedState)
+
+        val projectId = currentState.config.projectId
+        if (projectId.isNotBlank()) {
+            val now = System.currentTimeMillis()
+            var outSizeBytes: Long? = null
+            var outW: Int? = null
+            var outH: Int? = null
+
+            try {
+                val cleanPath = outputUri.toString().removePrefix("file://").let {
+                    if (it.startsWith("/") && it.length > 2 && it[2] == ':') it.substring(1) else it
+                }
+                val outputFile = java.io.File(cleanPath)
+                if (outputFile.exists()) {
+                    outSizeBytes = outputFile.length()
+                }
+
+                val retriever = android.media.MediaMetadataRetriever()
+                retriever.setDataSource(context, outputUri)
+                val wStr = retriever.extractMetadata(android.media.MediaMetadataRetriever.METADATA_KEY_VIDEO_WIDTH)
+                val hStr = retriever.extractMetadata(android.media.MediaMetadataRetriever.METADATA_KEY_VIDEO_HEIGHT)
+                outW = wStr?.toIntOrNull()
+                outH = hStr?.toIntOrNull()
+                retriever.release()
+            } catch (_: Exception) {}
+
+            try {
+                val storage = com.tupaz.data.storage.ProjectStorage(context)
+                storage.updateProjectStatus(
+                    projectId = projectId,
+                    status = com.tupaz.ui.main.ProjectStatus.COMPLETED,
+                    outputUriString = outputUri.toString(),
+                    realTime = realProcessingTime,
+                    realSize = realOutputSize,
+                    outputSizeBytes = outSizeBytes,
+                    outputWidth = outW,
+                    outputHeight = outH,
+                    completedAt = now
+                )
+
+                // Asynchronously generate and save thumbnail without failing the job if thumbnail fails
+                val existingProject = storage.getProject(projectId)
+                if (existingProject != null) {
+                    kotlinx.coroutines.CoroutineScope(kotlinx.coroutines.Dispatchers.IO).launch {
+                        try {
+                            val thumbFile = com.tupaz.data.storage.ProjectThumbnailManager.getOrGenerateThumbnail(context, existingProject)
+                            if (thumbFile != null && thumbFile.exists()) {
+                                storage.updateProjectStatus(
+                                    projectId = projectId,
+                                    status = com.tupaz.ui.main.ProjectStatus.COMPLETED,
+                                    thumbnailPath = thumbFile.absolutePath
+                                )
+                            }
+                        } catch (_: Exception) {}
+                    }
+                }
+            } catch (e: Exception) {
+                Log.e(TAG, "Failed to update project status to COMPLETED", e)
+            }
+        }
+
         Log.i(TAG, "[Tupaz-Manager] Job completed successfully: outputUri=$outputUri")
     }
 
@@ -165,11 +256,30 @@ object ProcessingManager {
         )
         _state.value = failedState
         persistState(context, failedState)
+
+        val projectId = currentState.config.projectId
+        if (projectId.isNotBlank()) {
+            try {
+                com.tupaz.data.storage.ProjectStorage(context).updateProjectStatus(
+                    projectId = projectId,
+                    status = com.tupaz.ui.main.ProjectStatus.FAILED
+                )
+            } catch (e: Exception) {
+                Log.e(TAG, "Failed to update project status to FAILED", e)
+            }
+        }
+
         Log.e(TAG, "[Tupaz-Manager] Job failed: $errorMessage")
     }
 
     fun cancelProcessing(context: Context) {
-        Log.i(TAG, "[Tupaz-Manager] Cancelling processing job...")
+        val currentStatus = _state.value.status
+        if (currentStatus != ProcessingStatus.PROCESSING) {
+            Log.i(TAG, "[Tupaz-Manager] cancelProcessing ignored because status is $currentStatus")
+            return
+        }
+
+        Log.i(TAG, "[Tupaz-Manager] Cancelling active processing job...")
         val serviceIntent = Intent(context, VideoProcessingService::class.java).apply {
             action = VideoProcessingService.ACTION_CANCEL
         }
@@ -182,10 +292,46 @@ object ProcessingManager {
         val cancelledState = _state.value.copy(
             status = ProcessingStatus.CANCELLED,
             currentStage = "Cancelled by user",
-            errorMessage = "Processing was cancelled by user."
+            errorMessage = null,
+            outputUriString = null
         )
         _state.value = cancelledState
         persistState(context, cancelledState)
+
+        val projectId = _state.value.config.projectId
+        if (projectId.isNotBlank()) {
+            try {
+                com.tupaz.data.storage.ProjectStorage(context).updateProjectStatus(
+                    projectId = projectId,
+                    status = com.tupaz.ui.main.ProjectStatus.CANCELLED
+                )
+            } catch (e: Exception) {
+                Log.e(TAG, "Failed to update project status to CANCELLED", e)
+            }
+        }
+    }
+
+    fun loadCompletedProject(
+        context: Context,
+        config: ProcessingJobConfig,
+        outputUri: Uri,
+        realTime: String,
+        realSize: String
+    ) {
+        val completedState = ProcessingState(
+            status = ProcessingStatus.COMPLETED,
+            config = config,
+            totalFrames = 100,
+            processedFrames = 100,
+            progressPercentage = 100,
+            currentStage = "Processing Complete",
+            remainingTime = "00:00",
+            outputUriString = outputUri.toString(),
+            realProcessingTime = realTime,
+            realOutputSize = realSize
+        )
+        _state.value = completedState
+        persistState(context, completedState)
     }
 
     fun setThermalPause(context: Context, isPaused: Boolean, statusName: String) {

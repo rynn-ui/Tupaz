@@ -11,37 +11,65 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
 
+import com.tupaz.domain.pipeline.AiQuality
+
 class EnhanceVideoViewModel : ViewModel() {
 
     private val _uiState = MutableStateFlow(EnhanceUiState())
     val uiState: StateFlow<EnhanceUiState> = _uiState.asStateFlow()
 
+    fun setProjectName(name: String) {
+        _uiState.update { it.copy(projectName = name) }
+    }
+
+    fun resetProject() {
+        _uiState.update { EnhanceUiState() }
+    }
+
     fun refreshInstalledModels(context: Context) {
         val storage = ModelStorage(context)
         storage.ensureDefaultModelsProvisioned()
         val defaultModels = listOf(
-            ModelOption("realesr-animevideov3-x2", "RealESRGAN AnimeVideo v3 (2x)", "Official Real-ESRGAN model for 2x video upscaling.", isInstalled = storage.isModelInstalled("realesr-animevideov3-x2"))
+            ModelOption(AiQuality.LOW.modelId, AiQuality.LOW.modelDisplayName, AiQuality.LOW.description, isInstalled = storage.isModelInstalled(AiQuality.LOW.modelId)),
+            ModelOption(AiQuality.MEDIUM.modelId, AiQuality.MEDIUM.modelDisplayName, AiQuality.MEDIUM.description, isInstalled = storage.isModelInstalled(AiQuality.MEDIUM.modelId)),
+            ModelOption(AiQuality.HIGH.modelId, AiQuality.HIGH.modelDisplayName, AiQuality.HIGH.description, isInstalled = storage.isModelInstalled(AiQuality.HIGH.modelId))
         )
 
-        val installedModels = defaultModels.filter { it.isInstalled }
-        val selectedModelName = if (installedModels.any { it.name == _uiState.value.selectedModel }) {
-            _uiState.value.selectedModel
-        } else if (installedModels.isNotEmpty()) {
-            installedModels.first().name
-        } else {
-            "No Model Installed"
-        }
-
-        val selectedDesc = installedModels.find { it.name == selectedModelName }?.description
-            ?: "Please download an AI model from Model Store to start processing."
-        val detectedScale = if (selectedModelName.contains("4x") || selectedModelName.contains("x4")) "4x" else "2x"
+        val currentQuality = _uiState.value.selectedQuality
+        val selectedModelName = currentQuality.modelDisplayName
+        val selectedDesc = currentQuality.description
 
         _uiState.update {
             it.copy(
                 availableModels = defaultModels,
                 selectedModel = selectedModelName,
                 selectedModelDescription = selectedDesc,
-                selectedScaleFactor = detectedScale
+                selectedScaleFactor = "2x"
+            )
+        }
+    }
+
+    fun selectQuality(quality: AiQuality) {
+        _uiState.update { currentState ->
+            val description = quality.description
+            val (estTime, estSize) = calculateExactEstimates(
+                currentState.videoSizeBytes,
+                currentState.durationMs,
+                currentState.videoWidth,
+                currentState.videoHeight,
+                currentState.videoFps,
+                quality.modelDisplayName,
+                currentState.selectedAiMode,
+                "2x",
+                quality
+            )
+            currentState.copy(
+                selectedQuality = quality,
+                selectedModel = quality.modelDisplayName,
+                selectedModelDescription = description,
+                selectedScaleFactor = "2x",
+                estimatedOutputTime = estTime,
+                estimatedOutputSize = estSize
             )
         }
     }
@@ -226,7 +254,8 @@ class EnhanceVideoViewModel : ViewModel() {
         fps: Int,
         modelName: String,
         mode: AiModeSelection,
-        scaleFactorStr: String = "2x"
+        scaleFactorStr: String = "2x",
+        quality: AiQuality = AiQuality.HIGH
     ): Pair<String, String> {
         if (durationMs <= 0L || width <= 0 || height <= 0) {
             return Pair("Calculating estimate…", "Calculating estimate…")
@@ -241,10 +270,10 @@ class EnhanceVideoViewModel : ViewModel() {
         val targetHeight = height * scaleFactor
 
         val resRatio = (width.toDouble() * height) / (1920.0 * 1080.0)
-        val modelSpeedMultiplier = when {
-            modelName.contains("Anime", ignoreCase = true) -> 1.0
-            modelName.contains("v4", ignoreCase = true) -> 1.2
-            else -> 1.0
+        val modelSpeedMultiplier = when (quality) {
+            AiQuality.LOW -> 0.40
+            AiQuality.MEDIUM -> 0.65
+            AiQuality.HIGH -> 1.00
         }
         val modeMultiplier = if (mode == AiModeSelection.AUTO) 1.0 else 1.15
         val scaleTimeMultiplier = if (scaleFactor == 4) 2.2 else 1.0

@@ -71,16 +71,18 @@ class ModelDownloadWorker(
             }
 
             // Step 3: Verify SHA-256 of completed .bin.tmp file
+            val isExpectedHashFormatValid = expectedSha256.isNotBlank() &&
+                    expectedSha256.length == 64 &&
+                    expectedSha256.all { c -> c in '0'..'9' || c in 'a'..'f' || c in 'A'..'F' }
+
             val computedSha256 = computeSha256(tempBinFile)
-            val isSha256Valid = computedSha256.equals(expectedSha256, ignoreCase = true) ||
-                    computedSha256.startsWith(expectedSha256, ignoreCase = true) ||
-                    expectedSha256.startsWith(computedSha256, ignoreCase = true) ||
-                    expectedSha256.contains("e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855") ||
-                    expectedSha256.contains("5f70bf18a086007016e948b04aed3")
+            val isSha256Valid = isExpectedHashFormatValid && computedSha256.equals(expectedSha256, ignoreCase = true)
 
             if (!isSha256Valid) {
-                Log.e(TAG, "SHA-256 mismatch for $modelId. Expected: $expectedSha256, computed: $computedSha256")
-                tempBinFile.delete()
+                Log.e(TAG, "SHA-256 integrity failure for $modelId. Expected: $expectedSha256, computed: $computedSha256")
+                if (tempBinFile.exists()) {
+                    tempBinFile.delete()
+                }
                 return@withContext Result.failure(workDataOf(KEY_ERROR_MESSAGE to "SHA-256 integrity check failed"))
             }
 

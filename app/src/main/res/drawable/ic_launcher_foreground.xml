@@ -1,0 +1,102 @@
+<?xml version="1.0" encoding="utf-8"?>
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:aapt="http://schemas.android.com/aapt"
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportWidth="108"
+    android:viewportHeight="108">
+
+    <!-- Horizontal Motion / Pixel Streaks (Left Side) -->
+    <path android:fillColor="#FF8A8C92" android:pathData="M29,39 h5 v2 h-5 z" />
+    <path android:fillColor="#FFD2D4DA" android:pathData="M24,42 h7 v2 h-7 z" />
+    <path android:fillColor="#FFFFFFFF" android:pathData="M33,42 h4 v2 h-4 z" />
+    <path android:fillColor="#FF686A70" android:pathData="M22,45 h5 v2 h-5 z" />
+    <path android:fillColor="#FFE4E6EB" android:pathData="M29,45 h7 v2 h-7 z" />
+    <path android:fillColor="#FFFFFFFF" android:pathData="M25,48 h8 v2 h-8 z" />
+    <path android:fillColor="#FFA0A2A8" android:pathData="M35,48 h5 v2 h-5 z" />
+    <path android:fillColor="#FF808288" android:pathData="M21,51 h6 v2 h-6 z" />
+    <path android:fillColor="#FFFFFFFF" android:pathData="M29,51 h8 v2 h-8 z" />
+    <path android:fillColor="#FFE0E2E8" android:pathData="M39,51 h3 v2 h-3 z" />
+    <path android:fillColor="#FFE0E2E8" android:pathData="M23,54 h7 v2 h-7 z" />
+    <path android:fillColor="#FFB0B2B8" android:pathData="M32,54 h6 v2 h-6 z" />
+    <path android:fillColor="#FFFFFFFF" android:pathData="M26,57 h9 v2 h-9 z" />
+    <path android:fillColor="#FF8A8C92" android:pathData="M37,57 h4 v2 h-4 z" />
+    <path android:fillColor="#FF707278" android:pathData="M22,60 h5 v2 h-5 z" />
+    <path android:fillColor="#FFC4C6CB" android:pathData="M29,60 h6 v2 h-6 z" />
+    <path android:fillColor="#FF909298" android:pathData="M27,63 h7 v2 h-7 z" />
+    <path android:fillColor="#FF606268" android:pathData="M31,66 h5 v2 h-5 z" />
+
+    <!-- Upper Light Facet (Top Blade) -->
+    <path android:pathData="M39,41 L47,36 L84,23 L54,52 Z">
+        <aapt:attr name="android:fillColor">
+            <gradient
+                android:startX="47"
+                android:startY="36"
+                android:endX="84"
+                android:endY="23"
+                android:type="linear">
+                <item android:offset="0.00" android:color="#FFFFFFFF" />
+                <item android:offset="0.55" android:color="#FFE2E4E8" />
+                <item android:offset="1.00" android:color="#FFB4B6BC" />
+            </gradient>
+        </aapt:attr>
+    </path>
+
+    <!-- Left Vertical Ridge Facet (Silver Side) -->
+    <path android:pathData="M47,36 L54,52 L41,79 L39,41 Z">
+        <aapt:attr name="android:fillColor">
+            <gradient
+                android:startX="39"
+                android:startY="41"
+                android:endX="54"
+                android:endY="52"
+                android:type="linear">
+                <item android:offset="0.00" android:color="#FFEAEBEC" />
+                <item android:offset="0.60" android:color="#FFA8AAA5" />
+                <item android:offset="1.00" android:color="#FF787A80" />
+            </gradient>
+        </aapt:attr>
+    </path>
+
+    <!-- Right Shadow Wing Facet (Dark Charcoal Metallic) -->
+    <path android:pathData="M54,52 L84,23 L73,71 L53,62 Z">
+        <aapt:attr name="android:fillColor">
+            <gradient
+                android:startX="54"
+                android:startY="52"
+                android:endX="73"
+                android:endY="71"
+                android:type="linear">
+                <item android:offset="0.00" android:color="#FF1A1B1F" />
+                <item android:offset="0.50" android:color="#FF292A30" />
+                <item android:offset="1.00" android:color="#FF383A42" />
+            </gradient>
+        </aapt:attr>
+    </path>
+
+    <!-- Bottom Wing Facet (Metallic Under-Shadow) -->
+    <path android:pathData="M54,52 L53,62 L41,79 Z">
+        <aapt:attr name="android:fillColor">
+            <gradient
+                android:startX="54"
+                android:startY="52"
+                android:endX="41"
+                android:endY="79"
+                android:type="linear">
+                <item android:offset="0.00" android:color="#FF484A52" />
+                <item android:offset="1.00" android:color="#FF1D1E22" />
+            </gradient>
+        </aapt:attr>
+    </path>
+
+    <!-- Nested Pure White Forward / Play Symbol -->
+    <path
+        android:fillColor="#FFFFFFFF"
+        android:pathData="M62,44.5 C62,43.7 62.9,43.2 63.6,43.6 L74.8,52.1 C75.4,52.6 75.4,55.4 74.8,55.9 L63.6,64.4 C62.9,64.8 62,64.3 62,63.5 Z" />
+
+    <!-- Top Edge Pure White Highlight Stroke -->
+    <path
+        android:pathData="M39,41 L47,36 L84,23"
+        android:strokeWidth="0.8"
+        android:strokeColor="#FFFFFFFF" />
+</vector>

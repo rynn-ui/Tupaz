@@ -6,7 +6,6 @@ import io.mockk.mockk
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNotNull
-import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Before
 import org.junit.Rule
@@ -33,7 +32,7 @@ class ModelStorageTest {
     }
 
     @Test
-    fun `getModelsRootDir resolves fallback filesDir when external is null`() {
+    fun getModelsRootDir_resolvesFallbackFilesDir_whenExternalIsNull() {
         val root = modelStorage.getModelsRootDir()
         assertNotNull(root)
         assertTrue(root.exists())
@@ -41,39 +40,53 @@ class ModelStorageTest {
     }
 
     @Test
-    fun `isModelInstalled returns false when files are missing`() {
+    fun isModelInstalled_returnsFalse_whenFilesAreMissing() {
         assertFalse(modelStorage.isModelInstalled("model_x"))
     }
 
     @Test
-    fun `isModelInstalled returns true when param, bin, and meta exist`() {
+    fun isModelInstalled_returnsFalse_whenOnlyParamExists() {
+        val modelId = "model_partial_param"
+        val param = modelStorage.getParamFile(modelId)
+        param.writeText("param content")
+
+        assertFalse(modelStorage.isModelInstalled(modelId))
+    }
+
+    @Test
+    fun isModelInstalled_returnsFalse_whenOnlyBinExists() {
+        val modelId = "model_partial_bin"
+        val bin = modelStorage.getBinFile(modelId)
+        bin.writeText("bin content")
+
+        assertFalse(modelStorage.isModelInstalled(modelId))
+    }
+
+    @Test
+    fun isModelInstalled_returnsFalse_whenFilesAreEmpty() {
+        val modelId = "model_empty"
+        val param = modelStorage.getParamFile(modelId)
+        val bin = modelStorage.getBinFile(modelId)
+        param.createNewFile()
+        bin.createNewFile()
+
+        assertFalse(modelStorage.isModelInstalled(modelId))
+    }
+
+    @Test
+    fun isModelInstalled_returnsTrue_whenBothParamAndBinExistNonEmpty() {
         val modelId = "model_installed"
         val param = modelStorage.getParamFile(modelId)
         val bin = modelStorage.getBinFile(modelId)
-        val meta = modelStorage.getMetaFile(modelId)
 
         param.writeText("param content")
         bin.writeText("bin content")
 
-        val localMeta = LocalModelMeta(
-            modelId = modelId,
-            version = "1.0.0",
-            sha256 = "abc123sha",
-            installedAt = System.currentTimeMillis(),
-            sizeBytes = 100
-        )
-        modelStorage.writeLocalMeta(localMeta)
-
         assertTrue(modelStorage.isModelInstalled(modelId))
-
-        val readMeta = modelStorage.getLocalMeta(modelId)
-        assertNotNull(readMeta)
-        assertEquals("1.0.0", readMeta?.version)
-        assertEquals("abc123sha", readMeta?.sha256)
     }
 
     @Test
-    fun `deleteModel removes directory recursively`() {
+    fun deleteModel_removesDirectoryRecursively() {
         val modelId = "model_to_delete"
         val param = modelStorage.getParamFile(modelId)
         param.writeText("test")

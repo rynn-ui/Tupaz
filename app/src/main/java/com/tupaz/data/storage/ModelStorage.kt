@@ -64,6 +64,8 @@ class ModelStorage(
      */
     fun ensureDefaultModelsProvisioned() {
         val defaultModels = mapOf(
+            "animejanai-hd-v3-superultracompact-x2" to Pair("animejanai-hd-v3-superultracompact-x2.param", "animejanai-hd-v3-superultracompact-x2.bin"),
+            "animejanai-hd-v3-ultracompact-x2" to Pair("animejanai-hd-v3-ultracompact-x2.param", "animejanai-hd-v3-ultracompact-x2.bin"),
             "realesr-animevideov3-x2" to Pair("realesr-animevideov3-x2.param", "realesr-animevideov3-x2.bin")
         )
 
@@ -72,32 +74,31 @@ class ModelStorage(
             val bin = getBinFile(id)
             val meta = getMetaFile(id)
 
-            // Check if real weights are already installed (param > 1KB means real, not dummy)
-            val needsInstall = !param.exists() || param.length() < 1024L ||
-                               !bin.exists() || bin.length() < 100_000L
+            val needsInstall = !param.exists() || param.length() == 0L ||
+                               !bin.exists() || bin.length() == 0L
 
             if (needsInstall) {
-                // Copy real .param from assets
                 try {
+                    getModelDir(id).mkdirs()
+
                     context.assets.open("models/${assetNames.first}").use { input ->
                         param.outputStream().use { output ->
                             input.copyTo(output)
                         }
                     }
-                    // Copy real .bin from assets
                     context.assets.open("models/${assetNames.second}").use { input ->
                         bin.outputStream().use { output ->
                             input.copyTo(output)
                         }
                     }
                     android.util.Log.i("ModelStorage",
-                        "Installed real model weights for $id: param=${param.length()} bytes, bin=${bin.length()} bytes")
+                        "Installed model weights for $id: param=${param.length()} bytes, bin=${bin.length()} bytes")
                 } catch (e: Exception) {
                     android.util.Log.e("ModelStorage", "Failed to extract model $id from assets", e)
                 }
             }
 
-            if (!meta.exists()) {
+            if (!meta.exists() && param.exists() && bin.exists()) {
                 val localMeta = LocalModelMeta(
                     modelId = id,
                     version = "0.2.5",
@@ -111,13 +112,24 @@ class ModelStorage(
     }
 
     /**
-     * Checks if a model is fully installed (both .bin, .param, and valid meta.json exist).
+     * Checks if a model is fully installed (both .bin AND .param exist and are non-empty).
+     * Strictly requires BOTH files to exist with size > 0.
      */
     fun isModelInstalled(modelId: String): Boolean {
         val bin = getBinFile(modelId)
         val param = getParamFile(modelId)
-        val meta = getMetaFile(modelId)
-        return bin.exists() && bin.length() > 0 && param.exists() && meta.exists()
+        return bin.exists() && bin.length() > 0L && param.exists() && param.length() > 0L
+    }
+
+    /**
+     * Self-healing model resolver. Checks if model is installed, and if missing,
+     * attempts automatic re-provisioning from bundled assets before returning status.
+     */
+    fun ensureModelAvailable(modelId: String): Boolean {
+        if (!isModelInstalled(modelId)) {
+            ensureDefaultModelsProvisioned()
+        }
+        return isModelInstalled(modelId)
     }
 
     /**

@@ -36,6 +36,11 @@ class MainViewModel(
         loadProjects()
     }
 
+    fun renameProject(projectId: String, newName: String) {
+        projectStorage.renameProject(projectId, newName)
+        loadProjects()
+    }
+
     fun deleteRecentProject(projectId: String) {
         projectStorage.deleteProject(projectId)
         loadProjects()

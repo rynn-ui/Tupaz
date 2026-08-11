@@ -32,7 +32,6 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.AutoAwesome
 import androidx.compose.material.icons.filled.CheckCircle
-import androidx.compose.material.icons.filled.CropFree
 import androidx.compose.material.icons.filled.Download
 import androidx.compose.material.icons.filled.Home
 import androidx.compose.material.icons.filled.MoreVert
@@ -55,6 +54,7 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
+import com.tupaz.ui.theme.accessibleButtonSize
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Slider
 import androidx.compose.material3.SliderDefaults
@@ -62,11 +62,16 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -95,11 +100,14 @@ import java.io.File
 fun ResultScreen(
     viewModel: ResultViewModel,
     onHome: () -> Unit,
+    onCancelled: () -> Unit = onHome,
     modifier: Modifier = Modifier
 ) {
     val uiState by viewModel.uiState.collectAsState()
     val context = LocalContext.current
+    val scope = rememberCoroutineScope()
     var showSavedPopup by remember { mutableStateOf(false) }
+    var isSaving by remember { mutableStateOf(false) }
 
     Scaffold(
         topBar = {
@@ -140,6 +148,11 @@ fun ResultScreen(
                 .padding(innerPadding)
         ) {
             when (val state = uiState) {
+                is ResultUiState.Cancelled -> {
+                    LaunchedEffect(Unit) {
+                        onCancelled()
+                    }
+                }
                 is ResultUiState.Processing -> {
                     val animatedProgress by animateFloatAsState(
                         targetValue = state.progressPercentage / 100f,
@@ -184,7 +197,6 @@ fun ResultScreen(
 
                                 Spacer(modifier = Modifier.height(28.dp))
 
-                                // Circular Vercel Progress Gauge
                                 Box(
                                     modifier = Modifier.size(190.dp),
                                     contentAlignment = Alignment.Center
@@ -194,7 +206,6 @@ fun ResultScreen(
                                         val radius = (size.minDimension - strokeWidth) / 2
                                         val center = androidx.compose.ui.geometry.Offset(size.width / 2, size.height / 2)
 
-                                        // Background Track
                                         drawCircle(
                                             color = Color(0xFF222222),
                                             radius = radius,
@@ -202,7 +213,6 @@ fun ResultScreen(
                                             style = androidx.compose.ui.graphics.drawscope.Stroke(width = strokeWidth)
                                         )
 
-                                        // Active White Arc
                                         drawArc(
                                             color = Color.White,
                                             startAngle = -90f,
@@ -464,7 +474,6 @@ fun ResultScreen(
                     ) {
                         item { Spacer(modifier = Modifier.height(4.dp)) }
 
-                        // ComparisonPlayer Frame
                         item {
                             ComparisonPlayer(
                                 originalUri = state.originalVideoUri,
@@ -485,7 +494,6 @@ fun ResultScreen(
                             )
                         }
 
-                        // Playback Controls
                         item {
                             Card(
                                 modifier = Modifier
@@ -547,23 +555,10 @@ fun ResultScreen(
                                             modifier = Modifier.size(18.dp)
                                         )
                                     }
-
-                                    IconButton(
-                                        onClick = {},
-                                        modifier = Modifier.size(32.dp)
-                                    ) {
-                                        Icon(
-                                            imageVector = Icons.Default.CropFree,
-                                            contentDescription = "Fullscreen",
-                                            tint = VercelTextPrimary,
-                                            modifier = Modifier.size(18.dp)
-                                        )
-                                    }
                                 }
                             }
                         }
 
-                        // Metric Summary Grid
                         item {
                             Card(
                                 modifier = Modifier
@@ -639,7 +634,6 @@ fun ResultScreen(
                             }
                         }
 
-                        // High-contrast Action Buttons Row
                         item {
                             Row(
                                 modifier = Modifier.fillMaxWidth(),
@@ -652,7 +646,7 @@ fun ResultScreen(
                                     },
                                     modifier = Modifier
                                         .weight(1f)
-                                        .height(48.dp),
+                                        .accessibleButtonSize(48.dp),
                                     shape = RoundedCornerShape(8.dp),
                                     colors = ButtonDefaults.outlinedButtonColors(
                                         containerColor = VercelSurface,
@@ -666,12 +660,23 @@ fun ResultScreen(
 
                                 Button(
                                     onClick = {
-                                        saveVideoToGallery(context, state.enhancedVideoUri ?: state.originalVideoUri, state.fileName)
-                                        showSavedPopup = true
+                                        if (!isSaving) {
+                                            isSaving = true
+                                            scope.launch {
+                                                val success = saveVideoToGallery(context, state.enhancedVideoUri ?: state.originalVideoUri, state.fileName)
+                                                isSaving = false
+                                                if (success) {
+                                                    showSavedPopup = true
+                                                } else {
+                                                    android.widget.Toast.makeText(context, "Failed to save video to gallery", android.widget.Toast.LENGTH_LONG).show()
+                                                }
+                                            }
+                                        }
                                     },
+                                    enabled = !isSaving,
                                     modifier = Modifier
                                         .weight(1f)
-                                        .height(48.dp),
+                                        .accessibleButtonSize(48.dp),
                                     shape = RoundedCornerShape(8.dp),
                                     colors = ButtonDefaults.buttonColors(
                                         containerColor = VercelTextPrimary,
@@ -680,7 +685,7 @@ fun ResultScreen(
                                 ) {
                                     Icon(Icons.Default.Download, contentDescription = null, tint = VercelBackground, modifier = Modifier.size(18.dp))
                                     Spacer(modifier = Modifier.width(8.dp))
-                                    Text("Save Video", style = MaterialTheme.typography.titleMedium.copy(color = VercelBackground, fontWeight = FontWeight.Bold))
+                                    Text(if (isSaving) "Saving..." else "Save Video", style = MaterialTheme.typography.titleMedium.copy(color = VercelBackground, fontWeight = FontWeight.Bold))
                                 }
                             }
                         }
@@ -690,7 +695,6 @@ fun ResultScreen(
                 }
             }
 
-            // Save Success Popup Dialog
             if (showSavedPopup) {
                 Dialog(
                     onDismissRequest = { showSavedPopup = false }
@@ -779,9 +783,10 @@ private fun formatTimeMs(ms: Long): String {
     return "%02d:%02d".format(min, sec)
 }
 
-private fun saveVideoToGallery(context: Context, videoUri: Uri?, fileName: String): Boolean {
+private suspend fun saveVideoToGallery(context: Context, videoUri: Uri?, fileName: String): Boolean = withContext(Dispatchers.IO) {
     val cleanName = "Tupaz_Enhanced_" + System.currentTimeMillis() + "_" + fileName.replace(" ", "_")
-    return try {
+    var createdItemUri: Uri? = null
+    return@withContext try {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
             val contentValues = ContentValues().apply {
                 put(MediaStore.Video.Media.DISPLAY_NAME, cleanName)
@@ -790,7 +795,8 @@ private fun saveVideoToGallery(context: Context, videoUri: Uri?, fileName: Strin
                 put(MediaStore.Video.Media.IS_PENDING, 1)
             }
             val collection = MediaStore.Video.Media.getContentUri(MediaStore.VOLUME_EXTERNAL_PRIMARY)
-            val itemUri = context.contentResolver.insert(collection, contentValues) ?: return false
+            val itemUri = context.contentResolver.insert(collection, contentValues) ?: return@withContext false
+            createdItemUri = itemUri
 
             context.contentResolver.openOutputStream(itemUri)?.use { outputStream ->
                 if (videoUri != null) {
@@ -835,6 +841,9 @@ private fun saveVideoToGallery(context: Context, videoUri: Uri?, fileName: Strin
             true
         }
     } catch (_: Exception) {
+        if (createdItemUri != null && Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+            try { context.contentResolver.delete(createdItemUri, null, null) } catch (_: Exception) {}
+        }
         false
     }
 }

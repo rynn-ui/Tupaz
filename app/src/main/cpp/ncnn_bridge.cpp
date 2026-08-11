@@ -208,6 +208,8 @@ Java_com_tupaz_pipeline_NcnnBridge_nativeDestroy(
         return;
     }
 
+    g_initialized.store(false);
+
 #if TUPAZ_HAS_NCNN
     if (g_net != nullptr) {
         delete g_net;
@@ -219,10 +221,25 @@ Java_com_tupaz_pipeline_NcnnBridge_nativeDestroy(
     }
 #endif
 
-    g_initialized.store(false);
     g_gpu_enabled.store(false);
     g_param_file.clear();
     g_bin_file.clear();
+
+    g_accum_r.clear();
+    g_accum_r.shrink_to_fit();
+    g_accum_g.clear();
+    g_accum_g.shrink_to_fit();
+    g_accum_b.clear();
+    g_accum_b.shrink_to_fit();
+    g_accum_w.clear();
+    g_accum_w.shrink_to_fit();
+    g_out_buffer.clear();
+    g_out_buffer.shrink_to_fit();
+    g_tile_in_buf.clear();
+    g_tile_in_buf.shrink_to_fit();
+    g_tile_out_buf.clear();
+    g_tile_out_buf.shrink_to_fit();
+
     LOGI("Native NCNN bridge destroyed");
 }
 
@@ -236,20 +253,30 @@ Java_com_tupaz_pipeline_NcnnBridge_nativeProcessFrame(
     jint scale_factor,
     jint mode
 ) {
-    if (!g_initialized.load()) {
-        LOGE("nativeProcessFrame called before initialization");
-        return nullptr;
-    }
-
     if (input_frame == nullptr || width <= 0 || height <= 0) {
         LOGE("Invalid parameters passed to nativeProcessFrame");
         return nullptr;
     }
 
+    // Lock global engine and buffer access for thread safety
+    std::lock_guard<std::mutex> buffer_lock(g_engine_mutex);
+
+    if (!g_initialized.load()) {
+        LOGE("nativeProcessFrame called before initialization or after destroy");
+        return nullptr;
+    }
+
+#if TUPAZ_HAS_NCNN
+    if (g_net == nullptr) {
+        LOGE("nativeProcessFrame called but g_net is null");
+        return nullptr;
+    }
+#endif
+
     int scale = (scale_factor >= 4) ? 4 : ((scale_factor <= 1) ? 1 : 2);
     int out_width = width * scale;
     int out_height = height * scale;
-    size_t out_pixels = static_cast<size_t>(out_width * out_height);
+    size_t out_pixels = static_cast<size_t>(out_width) * static_cast<size_t>(out_height);
     size_t out_length = out_pixels * 4;
 
     tupaz::jni::ScopedByteArray scoped_input(env, input_frame);
@@ -269,19 +296,17 @@ Java_com_tupaz_pipeline_NcnnBridge_nativeProcessFrame(
         return nullptr;
     }
 
-    // Lock global buffer access for thread safety
-    std::lock_guard<std::mutex> buffer_lock(g_engine_mutex);
-
-    // Reuse persistent buffers to prevent heap churn (malloc/free of ~56MB per frame)
-    if (g_accum_r.size() < out_pixels) {
-        g_accum_r.resize(out_pixels);
-        g_accum_g.resize(out_pixels);
-        g_accum_b.resize(out_pixels);
-        g_accum_w.resize(out_pixels);
-    }
-    if (g_out_buffer.size() < out_length) {
-        g_out_buffer.resize(out_length);
-    }
+    try {
+        // Reuse persistent buffers to prevent heap churn (malloc/free of ~56MB per frame)
+        if (g_accum_r.size() < out_pixels) {
+            g_accum_r.resize(out_pixels);
+            g_accum_g.resize(out_pixels);
+            g_accum_b.resize(out_pixels);
+            g_accum_w.resize(out_pixels);
+        }
+        if (g_out_buffer.size() < out_length) {
+            g_out_buffer.resize(out_length);
+        }
 
     // IEEE 754: float 0.0f is all-zero bytes, safe for memset
     std::memset(g_accum_r.data(), 0, out_pixels * sizeof(float));
@@ -569,8 +594,15 @@ Java_com_tupaz_pipeline_NcnnBridge_nativeProcessFrame(
         return safe_array;
     }
 
-    env->SetByteArrayRegion(output_array, 0, static_cast<jsize>(out_length), reinterpret_cast<const jbyte*>(out_buf_ptr));
-    return output_array;
+        env->SetByteArrayRegion(output_array, 0, static_cast<jsize>(out_length), reinterpret_cast<const jbyte*>(out_buf_ptr));
+        return output_array;
+    } catch (const std::exception& e) {
+        LOGE("[Tupaz-Native] Exception in nativeProcessFrame: %s", e.what());
+        return nullptr;
+    } catch (...) {
+        LOGE("[Tupaz-Native] Unknown C++ exception in nativeProcessFrame");
+        return nullptr;
+    }
 }
 
 JNIEXPORT jlong JNICALL

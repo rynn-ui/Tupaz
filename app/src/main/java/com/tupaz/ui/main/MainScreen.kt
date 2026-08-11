@@ -1,6 +1,9 @@
 package com.tupaz.ui.main
 
 import android.net.Uri
+import androidx.compose.foundation.Image
+import androidx.compose.ui.res.painterResource
+import com.tupaz.R
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -22,6 +25,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ChevronRight
 import androidx.compose.material.icons.filled.Delete
+import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material.icons.filled.Movie
 import androidx.compose.material.icons.filled.Settings
@@ -39,6 +43,7 @@ import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
@@ -56,8 +61,14 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import com.tupaz.data.processing.ProcessingManager
-import com.tupaz.data.processing.ProcessingStatus
+import androidx.compose.runtime.produceState
+import androidx.compose.ui.graphics.ImageBitmap
+import androidx.compose.ui.graphics.asImageBitmap
+import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.platform.LocalContext
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
+import com.tupaz.data.storage.ProjectThumbnailManager
 import com.tupaz.ui.theme.HeroBackgroundBrush
 import com.tupaz.ui.theme.MetallicBorderBrush
 import com.tupaz.ui.theme.VercelBackground
@@ -69,7 +80,6 @@ import com.tupaz.ui.theme.VercelTextMuted
 import com.tupaz.ui.theme.VercelTextPrimary
 import com.tupaz.ui.theme.VercelTextSecondary
 
-// Pre-instantiated corner shapes for hardware-accelerated zero-jank scrolling
 private val CardShape14 = RoundedCornerShape(14.dp)
 private val CardShape12 = RoundedCornerShape(12.dp)
 private val CardShape10 = RoundedCornerShape(10.dp)
@@ -81,12 +91,12 @@ fun MainScreen(
     viewModel: MainViewModel,
     onStartEnhance: (Uri?) -> Unit,
     onOpenModels: () -> Unit,
+    onOpenProject: (ProjectItem) -> Unit = {},
     onOpenSettings: () -> Unit = {},
     onOpenResult: () -> Unit = {},
     modifier: Modifier = Modifier
 ) {
     val uiState by viewModel.uiState.collectAsState()
-    val processingState by ProcessingManager.state.collectAsState()
 
     LaunchedEffect(Unit) {
         viewModel.loadProjects()
@@ -94,6 +104,7 @@ fun MainScreen(
 
     val rememberStartEnhance = remember(onStartEnhance) { { onStartEnhance(null) } }
     val rememberDeleteProject = remember(viewModel) { { id: String -> viewModel.deleteRecentProject(id) } }
+    val rememberRenameProject = remember(viewModel) { { id: String, name: String -> viewModel.renameProject(id, name) } }
 
     Scaffold(
         modifier = modifier,
@@ -104,33 +115,23 @@ fun MainScreen(
                 .fillMaxSize()
                 .padding(innerPadding)
                 .padding(horizontal = 16.dp),
-            verticalArrangement = Arrangement.spacedBy(14.dp)
+            verticalArrangement = Arrangement.spacedBy(16.dp)
         ) {
-            item(key = "header_space") { Spacer(modifier = Modifier.height(8.dp)) }
-
-            // Top Header: Vercel Luxury Monochrome Branding
-            item(key = "header_brand") {
+            item(key = "header") {
                 Row(
                     modifier = Modifier.fillMaxWidth(),
                     horizontalArrangement = Arrangement.SpaceBetween,
                     verticalAlignment = Alignment.CenterVertically
                 ) {
                     Row(verticalAlignment = Alignment.CenterVertically) {
-                        Box(
+                        Image(
+                            painter = painterResource(id = R.drawable.app_logo),
+                            contentDescription = "Tupaz Logo",
                             modifier = Modifier
                                 .size(40.dp)
                                 .clip(CardShape10)
-                                .background(VercelCardSurface)
-                                .border(1.dp, VercelBorderHighlight, CardShape10),
-                            contentAlignment = Alignment.Center
-                        ) {
-                            Icon(
-                                imageVector = Icons.Default.Star,
-                                contentDescription = null,
-                                tint = VercelTextPrimary,
-                                modifier = Modifier.size(20.dp)
-                            )
-                        }
+                                .border(1.dp, VercelBorderHighlight, CardShape10)
+                        )
                         Spacer(modifier = Modifier.width(12.dp))
                         Column {
                             Row(verticalAlignment = Alignment.CenterVertically) {
@@ -186,7 +187,6 @@ fun MainScreen(
                 }
             }
 
-            // High-End Ultra-Luxury Hero Banner (Flat zero-elevation Box container for smooth 120fps scrolling)
             item(key = "hero_banner") {
                 Box(
                     modifier = Modifier
@@ -270,7 +270,6 @@ fun MainScreen(
                 }
             }
 
-            // Quick Action Grid: Model Store (Feature Flag Controlled)
             if (com.tupaz.config.FeatureFlags.ENABLE_MODEL_STORE) {
                 item(key = "quick_actions") {
                     Row(
@@ -289,7 +288,6 @@ fun MainScreen(
                 }
             }
 
-            // Recent Projects Section Header
             item(key = "projects_header") {
                 Row(
                     modifier = Modifier.fillMaxWidth(),
@@ -307,9 +305,8 @@ fun MainScreen(
                 }
             }
 
-            // Recent Projects List or Empty State
             if (uiState.recentProjects.isEmpty()) {
-                item(key = "empty_projects") {
+                item(key = "empty_state") {
                     Box(
                         modifier = Modifier
                             .fillMaxWidth()
@@ -338,7 +335,8 @@ fun MainScreen(
                 items(uiState.recentProjects, key = { it.id }) { project ->
                     RecentProjectItemCard(
                         project = project,
-                        onClick = rememberStartEnhance,
+                        onClick = { onOpenProject(project) },
+                        onRename = { newName -> rememberRenameProject(project.id, newName) },
                         onDelete = { rememberDeleteProject(project.id) }
                     )
                 }
@@ -426,10 +424,129 @@ fun QuickActionCard(
 fun RecentProjectItemCard(
     project: ProjectItem,
     onClick: () -> Unit,
+    onRename: (String) -> Unit,
     onDelete: () -> Unit,
     modifier: Modifier = Modifier
 ) {
     var showMenu by remember { mutableStateOf(false) }
+    var showRenameDialog by remember { mutableStateOf(false) }
+    var showDeleteConfirmDialog by remember { mutableStateOf(false) }
+
+    val context = LocalContext.current
+    val thumbnailBitmapState = produceState<ImageBitmap?>(initialValue = null, key1 = project.id, key2 = project.thumbnailPath) {
+        value = withContext(Dispatchers.IO) {
+            try {
+                val file = ProjectThumbnailManager.getOrGenerateThumbnail(context, project)
+                if (file != null && file.exists() && file.length() > 0) {
+                    val options = android.graphics.BitmapFactory.Options().apply {
+                        inJustDecodeBounds = true
+                    }
+                    android.graphics.BitmapFactory.decodeFile(file.absolutePath, options)
+                    val targetDim = 320
+                    var sampleSize = 1
+                    if (options.outHeight > targetDim || options.outWidth > targetDim) {
+                        val halfHeight = options.outHeight / 2
+                        val halfWidth = options.outWidth / 2
+                        while (halfHeight / sampleSize >= targetDim && halfWidth / sampleSize >= targetDim) {
+                            sampleSize *= 2
+                        }
+                    }
+                    val decodeOptions = android.graphics.BitmapFactory.Options().apply {
+                        inSampleSize = sampleSize
+                        inPreferredConfig = android.graphics.Bitmap.Config.RGB_565
+                    }
+                    val bitmap = android.graphics.BitmapFactory.decodeFile(file.absolutePath, decodeOptions)
+                    bitmap?.asImageBitmap()
+                } else null
+            } catch (_: Exception) {
+                null
+            }
+        }
+    }
+    val thumbnailBitmap = thumbnailBitmapState.value
+
+    if (showRenameDialog) {
+        var newNameText by remember { mutableStateOf(project.projectName) }
+        androidx.compose.material3.AlertDialog(
+            onDismissRequest = { showRenameDialog = false },
+            title = {
+                Text(
+                    text = "Rename Project",
+                    style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold, color = VercelTextPrimary)
+                )
+            },
+            text = {
+                Column {
+                    Text(
+                        text = "Enter a new name for this project:",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = VercelTextSecondary
+                    )
+                    Spacer(modifier = Modifier.height(8.dp))
+                    androidx.compose.material3.OutlinedTextField(
+                        value = newNameText,
+                        onValueChange = { newNameText = it },
+                        singleLine = true,
+                        modifier = Modifier.fillMaxWidth(),
+                        colors = androidx.compose.material3.OutlinedTextFieldDefaults.colors(
+                            focusedTextColor = VercelTextPrimary,
+                            unfocusedTextColor = VercelTextPrimary,
+                            focusedBorderColor = VercelBorderHighlight,
+                            unfocusedBorderColor = VercelBorder
+                        )
+                    )
+                }
+            },
+            confirmButton = {
+                TextButton(onClick = {
+                    val finalName = newNameText.trim().ifEmpty { project.projectName }
+                    onRename(finalName)
+                    showRenameDialog = false
+                }) {
+                    Text("Save", color = VercelTextPrimary, fontWeight = FontWeight.Bold)
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { showRenameDialog = false }) {
+                    Text("Cancel", color = VercelTextSecondary)
+                }
+            },
+            containerColor = VercelSurface
+        )
+    }
+
+    if (showDeleteConfirmDialog) {
+        androidx.compose.material3.AlertDialog(
+            onDismissRequest = { showDeleteConfirmDialog = false },
+            title = {
+                Text(
+                    text = "Delete project?",
+                    style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold, color = VercelTextPrimary)
+                )
+            },
+            text = {
+                Text(
+                    text = "Deleting this project will permanently remove its saved record and associated output video.",
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = VercelTextSecondary
+                )
+            },
+            confirmButton = {
+                TextButton(onClick = {
+                    showDeleteConfirmDialog = false
+                    onDelete()
+                }) {
+                    Text("Delete", color = Color.Red, fontWeight = FontWeight.Bold)
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { showDeleteConfirmDialog = false }) {
+                    Text("Cancel", color = VercelTextSecondary)
+                }
+            },
+            containerColor = VercelSurface
+        )
+    }
 
     Box(
         modifier = modifier
@@ -446,23 +563,35 @@ fun RecentProjectItemCard(
         ) {
             Box(
                 modifier = Modifier
-                    .size(44.dp)
+                    .width(96.dp)
+                    .height(68.dp)
                     .clip(CardShape8)
                     .background(VercelCardSurface)
                     .border(1.dp, VercelBorderHighlight, CardShape8),
                 contentAlignment = Alignment.Center
             ) {
-                Icon(
-                    imageVector = Icons.Default.Movie,
-                    contentDescription = null,
-                    tint = VercelTextPrimary,
-                    modifier = Modifier.size(22.dp)
-                )
+                if (thumbnailBitmap != null) {
+                    Image(
+                        bitmap = thumbnailBitmap,
+                        contentDescription = "Project Thumbnail",
+                        contentScale = ContentScale.Crop,
+                        modifier = Modifier.fillMaxSize()
+                    )
+                } else {
+                    Icon(
+                        imageVector = Icons.Default.Movie,
+                        contentDescription = null,
+                        tint = VercelTextPrimary,
+                        modifier = Modifier.size(24.dp)
+                    )
+                }
             }
+
             Spacer(modifier = Modifier.width(12.dp))
+
             Column(modifier = Modifier.weight(1f)) {
                 Text(
-                    text = project.title,
+                    text = project.projectName,
                     style = MaterialTheme.typography.titleMedium.copy(
                         color = VercelTextPrimary,
                         fontWeight = FontWeight.Bold,
@@ -473,13 +602,41 @@ fun RecentProjectItemCard(
                 )
                 Spacer(modifier = Modifier.height(2.dp))
                 Text(
-                    text = "${project.resolutionLabel} · ${project.fpsLabel}",
+                    text = project.formattedResolutionPair,
                     style = MaterialTheme.typography.bodyMedium.copy(color = VercelTextSecondary, fontSize = 12.sp)
                 )
                 Text(
-                    text = "${project.durationLabel} · ${project.sizeLabel}",
+                    text = project.formattedModelLabel,
+                    style = MaterialTheme.typography.bodyMedium.copy(color = VercelTextSecondary, fontSize = 12.sp)
+                )
+                Text(
+                    text = "${project.formattedDuration} · ${project.formattedOutputSize}",
                     style = MaterialTheme.typography.labelSmall.copy(color = VercelTextMuted, fontSize = 11.sp)
                 )
+                Spacer(modifier = Modifier.height(2.dp))
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    Text(
+                        text = project.formattedStatusLabel,
+                        style = MaterialTheme.typography.labelSmall.copy(
+                            color = when (project.status) {
+                                ProjectStatus.COMPLETED -> Color(0xFF10B981)
+                                ProjectStatus.PROCESSING -> Color(0xFF3B82F6)
+                                ProjectStatus.FAILED -> Color(0xFFEF4444)
+                                ProjectStatus.CANCELLED -> VercelTextMuted
+                                ProjectStatus.DRAFT -> VercelTextSecondary
+                            },
+                            fontWeight = FontWeight.Bold,
+                            fontSize = 11.sp
+                        )
+                    )
+                    Text(
+                        text = project.formattedDate,
+                        style = MaterialTheme.typography.labelSmall.copy(color = VercelTextMuted, fontSize = 10.sp)
+                    )
+                }
             }
 
             Box {
@@ -497,8 +654,27 @@ fun RecentProjectItemCard(
 
                 DropdownMenu(
                     expanded = showMenu,
-                    onDismissRequest = { showMenu = false }
+                    onDismissRequest = { showMenu = false },
+                    modifier = Modifier.background(VercelSurface)
                 ) {
+                    DropdownMenuItem(
+                        text = {
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                Icon(
+                                    imageVector = Icons.Default.Edit,
+                                    contentDescription = null,
+                                    tint = VercelTextPrimary,
+                                    modifier = Modifier.size(18.dp)
+                                )
+                                Spacer(modifier = Modifier.width(8.dp))
+                                Text("Rename", color = VercelTextPrimary)
+                            }
+                        },
+                        onClick = {
+                            showMenu = false
+                            showRenameDialog = true
+                        }
+                    )
                     DropdownMenuItem(
                         text = {
                             Row(verticalAlignment = Alignment.CenterVertically) {
@@ -509,12 +685,12 @@ fun RecentProjectItemCard(
                                     modifier = Modifier.size(18.dp)
                                 )
                                 Spacer(modifier = Modifier.width(8.dp))
-                                Text("Delete Project", color = Color.Red)
+                                Text("Delete", color = Color.Red)
                             }
                         },
                         onClick = {
                             showMenu = false
-                            onDelete()
+                            showDeleteConfirmDialog = true
                         }
                     )
                 }
